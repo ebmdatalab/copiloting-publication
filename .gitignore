@@ -37,3 +37,9 @@ vignettes/*.pdf
 
 # R Environment Variables
 .Renviron
+
+# Don't upload data
+dat/*
+
+# Don't track this either!
+.DS_Store
