@@ -1,0 +1,217 @@
+---
+title: "Co-piloting: how have we grown (dated `r sqlite_file_last_modified %>% format('%d %B %Y')`)"
+author: "Lisa Hopcroft"
+date: "`r lubridate::today()`"
+output:
+    bookdown::html_document2:
+        number_sections: false
+        toc: true
+---
+
+```{r setup, include=FALSE, echo=FALSE, warnings=FALSE}
+library(tidyverse)
+library(readr)
+library(knitr)
+library(ggplot2)
+library(DiagrammeR)
+library(glue)
+library(flextable)
+library(officer)
+library(bookdown)
+library(tibble)
+
+knitr::opts_chunk$set( echo=FALSE, warnings=FALSE, message=FALSE, ft.align="left" )
+
+theme_set(theme_minimal())
+
+```
+
+<style>
+    p {margin: 10px 0px 25px; font-size:15px;}
+</style>
+
+
+
+```{r data_prep}
+
+base_table = readRDS( here("dat", "base_table.Rds" ) )
+jobs = readRDS( here( "dat","annotated_jobs.Rds") )
+releases = readRDS( here( "dat", "annotated_releases.Rds" ) )
+external_users_on_projects_table = readRDS( here( "dat", "external_users_on_projects_table.Rds" ) )
+copilots = readRDS( here( "dat", "copilot_table.Rds" ) )
+
+load( here("dat","report_variables.Rdat" ) )
+load( here("dat","sqlite_variables.Rdat" ) )
+
+```
+
+
+```{r }
+
+external_projects = base_table %>% filter( ! organisation_name %in% internal_organisations )
+num_organisations = external_projects %>% pull( organisation_name ) %>% unique() %>% length()
+num_projects = external_projects %>% pull( project_name ) %>% unique() %>% length() 
+
+external_projects_ids = external_projects %>% pull( project_id ) %>% unique()
+external_projects_list = external_projects %>% pull( project_name ) %>% unique()
+external_workspace_list = external_projects %>% pull( workspace_name ) %>% unique()
+
+
+```
+
+
+# Quantitative description
+
+The SQLite file was last modified on `r sqlite_file_last_modified`.
+Other relevant start/end dates are shown in the table below.
+
+```{r}
+dates_to_present = tribble(
+    ~variable, ~from, ~to,
+    "Applications (submitted)", min( application_submitted_range ), max(application_submitted_range),
+    "Applications (approved)", min( application_approved_range ), max(application_approved_range),
+    "Workspaces", min(workspace_creation_range), max(workspace_creation_range),
+    "Jobs (start)", min(job_start_range), max(job_start_range),
+    "Jobs (end)", min(job_stop_range), max(job_stop_range),
+    "Releases", min(release_range), max(release_range)
+)
+kable( dates_to_present )
+```
+
+## Overview: numbers of organisations, projects, copilots etc
+
+```{r}
+copilot_list = copilots %>% pull( copilot_name ) %>% unique()
+num_copilots = copilot_list %>% length
+```
+
+We have `r num_copilots` active co-pilots:
+
+```{r results='asis'}
+cat(paste('-', copilot_list %>% sort), sep = '\n')
+```
+
+
+```{r}
+
+external_users = external_users_on_projects_table %>% left_join(
+    users_and_organisations, by="user_name"
+) %>% filter( ! type %in% internal_organisations   )
+
+returning_external_users = external_users %>%
+group_by( user_name ) %>%
+summarise( n_projects = project_id %>% unique %>% length )  %>%
+filter( n_projects > 1 ) %>%
+arrange( -n_projects )
+
+```
+
+We have `r external_users %>% pull(user_name) %>% unique() %>% length`
+external users. `r returning_external_users %>% nrow` of these users
+have worked on more than one OpenSAFELY project.
+
+```{r}
+column_name_map = list(
+    organisation_name = "Organisation",
+    project_name = "Project",
+    project_count = "Number of projects",
+    workspace_count = "Number of workspaces",
+    total_num_files_released = "Number of files released",
+    #overall_time_to_release = "Time to first release (in days)",
+    #release_within_hard_limit = glue("Release within {hard_release_limit} days"),
+    #release_within_soft_limit = glue("Release within {soft_release_limit} days"),
+    #release_within_longer_limit = glue("Release within {longer_release_limit} days"),
+    #release_within_no_limit = glue("Release (no limit)"),
+    #n_hard_release = glue("Number released within {hard_release_limit} days"),
+    #perc_hard_release = glue("Percentage released within {hard_release_limit} days"),
+    #n_soft_release = glue("Number released within {soft_release_limit} days"),
+    #perc_soft_release = glue("Percentage released within {soft_release_limit} days"),
+    #n_longer_release = glue("Number released within {longer_release_limit} days"),
+    #perc_longer_release = glue("Percentage released within {longer_release_limit} days"),
+    n_projects_total = glue( "Total number of projects" ),
+    copilot_name = "Co-pilot name",
+    days_since_project_created = "Number of days since project was created",
+    days_since_first_workspace = "Number of days since first workspace was created",
+    project_creation_date = "Date that the project was created",
+    first_workspace_start_date = "Date on which the first workspace was created",
+    application_submitted_at = "Date on which the application was submitted",
+    application_approved_at = "Date on which the application was approved",
+    project_status = "Status of project (set by pilot)"
+)
+
+```
+
+```{r}
+
+projects_assigned_copilots = external_projects %>% filter( copilot_name != "None provided" )
+
+num_projects_assigned_copilots = projects_assigned_copilots %>%
+    pull( project_name ) %>% unique() %>% length()
+
+external_releases = releases %>%
+    filter( !is.na( release_created_at )) %>%
+    filter( project_name %in% external_projects_list ) %>%
+    ungroup( ) %>%
+    mutate( specific_time_to_release = difftime( release_created_at, first_workspace_start_date ) )
+
+projects_with_outputs = external_releases
+    
+num_projects_with_outputs = projects_with_outputs %>%
+    pull( project_name ) %>% unique() %>% length()
+
+projects_without_outputs = external_projects %>%
+    anti_join( projects_with_outputs, by="project_name" )
+num_projects_without_outputs = projects_without_outputs %>%
+    pull( project_name ) %>% unique() %>% length()
+
+```
+
+Find some overall counts in Table \@ref(tab:overallcounts) below.
+
+```{r}
+overall_counts = tribble(
+    ~count, ~n,
+    "Total number of projects", num_projects,
+    "Projects assigned co-pilots", num_projects_assigned_copilots,
+    "Projects with outputs", num_projects_with_outputs, 
+    "Projects without outputs", num_projects_without_outputs,
+    "Number of active copilots", num_copilots, 
+   " Number of organisations with pilots", num_organisations 
+)
+
+overall_counts %>%
+    ### Format table
+    flextable( ) %>%
+    set_header_labels( values=list(count = "" ) ) %>%
+    autofit() %>%
+    theme_zebra() %>%
+    footnote( i = 5, j = 1,
+            value = as_paragraph("We have at least 1 former co-pilot that is not included in the list above"),
+            ref_symbols = "a" ) %>%
+    set_caption( glue( "Overall counts (as of {sqlite_file_last_modified})" ),
+                autonum = run_autonum(seq_id = "tab", bkm = "overallcounts")) 
+
+```
+
+
+Projects may consist of multiple workspaces. A count of projects and workspaces per
+organisation is provided in the Table \@ref(tab:numPKperorg).
+
+```{r}
+
+external_projects %>%
+    ### Prepare data
+    group_by( organisation_name ) %>%
+    summarise( project_count = length(unique(project_name)),
+                workspace_count = length( unique(workspace_name) ) ) %>%
+    arrange( -project_count, organisation_name )%>%
+    janitor::adorn_totals() %>%
+    ### Format table
+    flextable( ) %>%
+    set_header_labels( values=column_name_map ) %>%
+    autofit() %>%
+    theme_zebra() %>%
+    set_caption( "Number of projects and workspaces per organisation",
+        autonum = run_autonum(seq_id = "tab", bkm = "numPKperorg")) 
+
+```
