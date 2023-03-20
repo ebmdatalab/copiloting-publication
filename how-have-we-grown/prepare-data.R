@@ -23,6 +23,7 @@ SELECT p.id AS project_id,
     p.name AS project_name,
     p.org_id as organisation_id,
     p.created_at as project_creation_date,
+    p.status as project_status,
     w.name AS workspace_name,
     w.id AS workspace_id,
     w.created_at AS workspace_start_date,
@@ -151,6 +152,22 @@ application_table = dbFetch(application_table.results) %>%
     mutate( days_to_approve_application = application_approved_at - application_submitted_at)
 dbClearResult(application_table.results)
 
+#####################################################################
+### USER DATA                                                     ###
+#####################################################################
+
+external_users_on_projects.query <- "
+SELECT DISTINCT pm.id as project_id, pm.user_id as user_id, u.username as user_name
+FROM jobserver_projectmembership pm,
+jobserver_user u
+WHERE u.id = pm.user_id AND
+u.is_staff != 1
+"
+
+external_users_on_projects.results = dbSendQuery(con, external_users_on_projects.query)
+external_users_on_projects_table = dbFetch(external_users_on_projects.results)
+dbClearResult(external_users_on_projects.results)
+
 ### Disconnect the connection
 
 dbDisconnect(con)
@@ -201,6 +218,12 @@ saveRDS(annotated_releases, here::here("dat", "annotated_releases.Rds"))
 #####################################################################
 
 saveRDS(copilot_table, here::here("dat", "copilot_table.Rds"))
+
+#####################################################################
+### SAVING THE USERS TABLE                                        ###
+#####################################################################
+
+saveRDS(external_users_on_projects_table, here::here("dat", "external_users_on_projects_table.Rds"))
 
 #####################################################################
 ### SAVING SOME VARIABLES                                         ###

@@ -1,24 +1,14 @@
 rm(list = ls())
 library(here)
 library(tibble)
+library(readr)
 
 internal_organisations = c(
     "DataLab",
     "The London School of Hygiene & Tropical Medicine"
 )
 
-projects_with_external_development = tribble(
-    ~Project, ~Organisation, ~Description,
-    "Germ defence", "University of Bristol", "Clinical trial methodology (specifics??)",
-    "??", "University of Bristol", "Poisson distribution option for dummy data",
-    "??", "??", "Addition of operators for pathology results",
-)
-
-
-hard_release_limit   = 7 * 4
-soft_release_limit   = 7 * 8
-longer_release_limit = 90
-
+users_and_organisations = read_csv(here("dat", "users_and_organisation.txt"))
 
 convert_cut = function( all_s, cuts ) {
     s_count = 0
